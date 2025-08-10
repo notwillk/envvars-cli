@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 )
 
 // JSONProcessor handles processing of JSON files
@@ -12,6 +13,12 @@ type JSONProcessor struct{}
 // CreateJSONProcessor creates a new JSON processor instance
 func CreateJSONProcessor() *JSONProcessor {
 	return &JSONProcessor{}
+}
+
+// isValidKey checks if a key matches the required regex pattern
+func (jp *JSONProcessor) isValidKey(key string) bool {
+	matched, _ := regexp.MatchString(`^[A-Za-z_][A-Za-z0-9_]*$`, key)
+	return matched
 }
 
 // ProcessFile reads a JSON file and extracts key-value pairs
@@ -28,10 +35,12 @@ func (jp *JSONProcessor) ProcessFile(filePath string) (map[string]string, error)
 		return nil, fmt.Errorf("failed to parse JSON file '%s': %w", filePath, err)
 	}
 
-	// Convert to string key-value pairs
+	// Convert to string key-value pairs, filtering invalid keys
 	result := make(map[string]string)
 	for key, value := range flatMap {
-		result[key] = fmt.Sprintf("%v", value)
+		if jp.isValidKey(key) {
+			result[key] = fmt.Sprintf("%v", value)
+		}
 	}
 
 	return result, nil

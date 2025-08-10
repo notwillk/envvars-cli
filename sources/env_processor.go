@@ -87,7 +87,7 @@ func parseEnvFile(filePath string) (EnvFile, error) {
 				value = strings.TrimSpace(parts[1])
 			}
 
-			if key != "" {
+			if key != "" && isValidKey(key) {
 				// Unquote the value
 				value = unquoteValue(value)
 				variables[key] = value
@@ -118,7 +118,7 @@ func parseEnvFile(filePath string) (EnvFile, error) {
 				value = strings.TrimSpace(parts[1])
 			}
 
-			if key != "" {
+			if key != "" && isValidKey(key) {
 				// Unquote and resolve variable references
 				value = unquoteValue(value)
 				value = resolveVariableReferences(value, variables)
@@ -138,6 +138,12 @@ func parseEnvFile(filePath string) (EnvFile, error) {
 	}
 
 	return envFile, nil
+}
+
+// isValidKey checks if a key matches the required regex pattern
+func isValidKey(key string) bool {
+	matched, _ := regexp.MatchString(`^[A-Za-z_][A-Za-z0-9_]*$`, key)
+	return matched
 }
 
 // unquoteValue removes quotes and handles escape sequences

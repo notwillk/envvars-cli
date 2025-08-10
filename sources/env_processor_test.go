@@ -386,3 +386,56 @@ func TestParseOptionsFile_InvalidJSON(t *testing.T) {
 		t.Error("Expected error for invalid JSON content")
 	}
 }
+
+func TestProcessFileWithMerge_FiltersInvalidKeys(t *testing.T) {
+	// Create a temporary file with valid and invalid keys
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with valid and invalid keys
+	envContent := `# Valid keys
+VALID_KEY=value1
+_UNDERSCORE_START=value2
+key_with_underscores=value3
+
+# Invalid keys (should be filtered out)
+123_START_WITH_NUMBER=invalid
+key-with-dash=invalid
+key with spaces=invalid
+key@special=invalid
+key#hash=invalid`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{}
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should only contain valid keys
+	expected := map[string]string{
+		"VALID_KEY":            "value1",
+		"_UNDERSCORE_START":    "value2",
+		"key_with_underscores": "value3",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+
+	// Verify invalid keys are not present
+	invalidKeys := []string{"123_START_WITH_NUMBER", "key-with-dash", "key with spaces", "key@special", "key#hash"}
+	for _, invalidKey := range invalidKeys {
+		if _, exists := result[invalidKey]; exists {
+			t.Errorf("Invalid key '%s' should not be present in result", invalidKey)
+		}
+	}
+}

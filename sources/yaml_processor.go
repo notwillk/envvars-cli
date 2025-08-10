@@ -3,6 +3,7 @@ package sources
 import (
 	"fmt"
 	"os"
+	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
@@ -13,6 +14,12 @@ type YAMLProcessor struct{}
 // CreateYAMLProcessor creates a new YAML processor instance
 func CreateYAMLProcessor() *YAMLProcessor {
 	return &YAMLProcessor{}
+}
+
+// isValidKey checks if a key matches the required regex pattern
+func (yp *YAMLProcessor) isValidKey(key string) bool {
+	matched, _ := regexp.MatchString(`^[A-Za-z_][A-Za-z0-9_]*$`, key)
+	return matched
 }
 
 // ProcessFile reads a YAML file and extracts key-value pairs
@@ -29,10 +36,12 @@ func (yp *YAMLProcessor) ProcessFile(filePath string) (map[string]string, error)
 		return nil, fmt.Errorf("failed to parse YAML file '%s': %w", filePath, err)
 	}
 
-	// Convert to string key-value pairs
+	// Convert to string key-value pairs, filtering invalid keys
 	result := make(map[string]string)
 	for key, value := range flatMap {
-		result[key] = fmt.Sprintf("%v", value)
+		if yp.isValidKey(key) {
+			result[key] = fmt.Sprintf("%v", value)
+		}
 	}
 
 	return result, nil

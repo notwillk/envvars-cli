@@ -1,7 +1,7 @@
 // Example usage of the ProcessFileWithMerge function
 // This file demonstrates how to use the merge functionality programmatically
 
-package main
+package merge_example
 
 import (
 	"fmt"

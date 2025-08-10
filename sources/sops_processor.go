@@ -3,6 +3,7 @@ package sources
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/getsops/sops/v3/decrypt"
@@ -15,6 +16,12 @@ type SOPSProcessor struct{}
 // CreateSOPSProcessor creates a new SOPS processor instance
 func CreateSOPSProcessor() *SOPSProcessor {
 	return &SOPSProcessor{}
+}
+
+// isValidKey checks if a key matches the required regex pattern
+func (p *SOPSProcessor) isValidKey(key string) bool {
+	matched, _ := regexp.MatchString(`^[A-Za-z_][A-Za-z0-9_]*$`, key)
+	return matched
 }
 
 // ProcessFile decrypts a SOPS-encrypted file and returns the key-value pairs
@@ -47,6 +54,11 @@ func (p *SOPSProcessor) ProcessFile(filePath string, decryptionKey string) ([]En
 // flattenMap recursively flattens a nested map into key-value pairs
 func (p *SOPSProcessor) flattenMap(prefix string, data map[string]interface{}, variables *[]EnvVar) {
 	for key, value := range data {
+		// Skip keys that don't match the required pattern
+		if !p.isValidKey(key) {
+			continue
+		}
+
 		fullKey := key
 		if prefix != "" {
 			fullKey = prefix + "_" + key

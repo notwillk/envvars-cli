@@ -1,7 +1,7 @@
 // Example usage of the formats package
 // This file demonstrates how to use the JSON output functionality
 
-package main
+package format_example
 
 import (
 	formatters "github.com/notwillk/envvars-cli/formatters"
