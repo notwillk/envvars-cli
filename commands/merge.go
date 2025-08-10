@@ -11,69 +11,73 @@ import (
 	"github.com/notwillk/envvars-cli/sources"
 )
 
-// EnvProcessorCommand handles the environment processing functionality
-type EnvProcessorCommand struct {
-	filePaths []string
-	format    string
-	jsonFile  string
-	yamlFile  string
+// MergeCommand handles the environment variable merging functionality
+type MergeCommand struct {
+	sources []Source
+	options Options
 }
 
-// NewEnvProcessorCommand creates a new environment processor command instance
-func NewEnvProcessorCommand(filePaths []string, format string, jsonFile string, yamlFile string) *EnvProcessorCommand {
-	return &EnvProcessorCommand{
-		filePaths: filePaths,
-		format:    format,
-		jsonFile:  jsonFile,
-		yamlFile:  yamlFile,
+// CreateMergeCommand creates a new merge command instance
+func CreateMergeCommand(sources []Source, options Options) *MergeCommand {
+	return &MergeCommand{
+		sources: sources,
+		options: options,
 	}
 }
 
-// Execute runs the environment processor command
-func (cmd *EnvProcessorCommand) Execute() error {
-	// Check if any files are specified
-	if len(cmd.filePaths) == 0 && cmd.jsonFile == "" && cmd.yamlFile == "" {
-		return fmt.Errorf("no files specified")
+// Execute runs the merge command
+func (cmd *MergeCommand) Execute() error {
+	// Check if any sources are specified
+	if len(cmd.sources) == 0 {
+		return fmt.Errorf("no sources specified")
 	}
 
-	// Process each file and merge the results
+	if cmd.options.Verbose {
+		fmt.Fprintf(os.Stderr, "Processing %d sources...\n", len(cmd.sources))
+	}
+
+	// Process each source and merge the results
 	var allVariables []sources.EnvVar
 
-	// Process ENV files
-	for _, filePath := range cmd.filePaths {
-		envFile, err := cmd.parseENVFile(filePath)
-		if err != nil {
-			return fmt.Errorf("failed to parse ENV file '%s': %w", filePath, err)
+	// Process sources in priority order (higher priority first)
+	for _, source := range cmd.sources {
+		if cmd.options.Verbose {
+			fmt.Fprintf(os.Stderr, "Processing %s file: %s (priority: %d)\n", source.Type, source.FilePath, source.Priority)
 		}
+
+		var envFile sources.EnvFile
+		var err error
+
+		switch source.Type {
+		case "json":
+			envFile, err = cmd.parseJSONFile(source.FilePath)
+		case "yaml":
+			envFile, err = cmd.parseYAMLFile(source.FilePath)
+		case "env":
+			envFile, err = cmd.parseENVFile(source.FilePath)
+		default:
+			return fmt.Errorf("unsupported source type: %s", source.Type)
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to parse %s file '%s': %w", source.Type, source.FilePath, err)
+		}
+
 		allVariables = append(allVariables, envFile.Variables...)
 	}
 
-	// Process JSON file if specified
-	if cmd.jsonFile != "" {
-		envFile, err := cmd.parseJSONFile(cmd.jsonFile)
-		if err != nil {
-			return fmt.Errorf("failed to parse JSON file '%s': %w", cmd.jsonFile, err)
-		}
-		allVariables = append(allVariables, envFile.Variables...)
-	}
-
-	// Process YAML file if specified
-	if cmd.yamlFile != "" {
-		envFile, err := cmd.parseYAMLFile(cmd.yamlFile)
-		if err != nil {
-			return fmt.Errorf("failed to parse YAML file '%s': %w", cmd.yamlFile, err)
-		}
-		allVariables = append(allVariables, envFile.Variables...)
-	}
-
-	// Convert to map for output formatting
+	// Convert to map for output formatting (later sources override earlier ones)
 	variablesMap := make(map[string]string)
 	for _, envVar := range allVariables {
 		variablesMap[envVar.Key] = envVar.Value
 	}
 
+	if cmd.options.Verbose {
+		fmt.Fprintf(os.Stderr, "Merged %d variables\n", len(variablesMap))
+	}
+
 	// Output in the specified format
-	switch cmd.format {
+	switch cmd.options.Format {
 	case "json":
 		return formatters.OutputAsJSON(variablesMap)
 	case "yaml":
@@ -81,24 +85,12 @@ func (cmd *EnvProcessorCommand) Execute() error {
 	case "env":
 		return formatters.OutputAsENV(variablesMap)
 	default:
-		return fmt.Errorf("unsupported output format: %s", cmd.format)
-	}
-}
-
-// parseEnvFile reads and parses an environment variable file
-func (cmd *EnvProcessorCommand) parseEnvFile(filePath string) (sources.EnvFile, error) {
-	// Use the specified format flags to determine how to parse the file
-	if cmd.jsonFile != "" && filePath == cmd.jsonFile {
-		return cmd.parseJSONFile(filePath)
-	} else if cmd.yamlFile != "" && filePath == cmd.yamlFile {
-		return cmd.parseYAMLFile(filePath)
-	} else {
-		return cmd.parseENVFile(filePath)
+		return fmt.Errorf("unsupported output format: %s", cmd.options.Format)
 	}
 }
 
 // parseENVFile reads and parses an environment variable file
-func (cmd *EnvProcessorCommand) parseENVFile(filePath string) (sources.EnvFile, error) {
+func (cmd *MergeCommand) parseENVFile(filePath string) (sources.EnvFile, error) {
 	// Use the sources package to parse the file
 	// Since parseEnvFile is private in sources, we'll implement the parsing here
 	file, err := os.Open(filePath)
@@ -188,8 +180,8 @@ func (cmd *EnvProcessorCommand) parseENVFile(filePath string) (sources.EnvFile, 
 }
 
 // parseJSONFile reads and parses a JSON file
-func (cmd *EnvProcessorCommand) parseJSONFile(filePath string) (sources.EnvFile, error) {
-	processor := sources.NewJSONProcessor()
+func (cmd *MergeCommand) parseJSONFile(filePath string) (sources.EnvFile, error) {
+	processor := sources.CreateJSONProcessor()
 	variables, err := processor.ProcessFile(filePath)
 	if err != nil {
 		return sources.EnvFile{}, fmt.Errorf("failed to parse JSON file '%s': %w", filePath, err)
@@ -213,8 +205,8 @@ func (cmd *EnvProcessorCommand) parseJSONFile(filePath string) (sources.EnvFile,
 }
 
 // parseYAMLFile reads and parses a YAML file
-func (cmd *EnvProcessorCommand) parseYAMLFile(filePath string) (sources.EnvFile, error) {
-	processor := sources.NewYAMLProcessor()
+func (cmd *MergeCommand) parseYAMLFile(filePath string) (sources.EnvFile, error) {
+	processor := sources.CreateYAMLProcessor()
 	variables, err := processor.ProcessFile(filePath)
 	if err != nil {
 		return sources.EnvFile{}, fmt.Errorf("failed to parse YAML file '%s': %w", filePath, err)
@@ -238,7 +230,7 @@ func (cmd *EnvProcessorCommand) parseYAMLFile(filePath string) (sources.EnvFile,
 }
 
 // unquoteValue removes quotes from a value if present
-func (cmd *EnvProcessorCommand) unquoteValue(value string) string {
+func (cmd *MergeCommand) unquoteValue(value string) string {
 	value = strings.TrimSpace(value)
 
 	// Remove single quotes
@@ -255,7 +247,7 @@ func (cmd *EnvProcessorCommand) unquoteValue(value string) string {
 }
 
 // resolveVariableReferences resolves ${VAR_NAME} references in values
-func (cmd *EnvProcessorCommand) resolveVariableReferences(value string, variables map[string]string) string {
+func (cmd *MergeCommand) resolveVariableReferences(value string, variables map[string]string) string {
 	// Use regex to find and replace variable references
 	re := regexp.MustCompile(`\$\{([^}]+)\}`)
 	return re.ReplaceAllStringFunc(value, func(match string) string {

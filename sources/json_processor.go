@@ -9,8 +9,8 @@ import (
 // JSONProcessor handles processing of JSON files
 type JSONProcessor struct{}
 
-// NewJSONProcessor creates a new JSON processor instance
-func NewJSONProcessor() *JSONProcessor {
+// CreateJSONProcessor creates a new JSON processor instance
+func CreateJSONProcessor() *JSONProcessor {
 	return &JSONProcessor{}
 }
 

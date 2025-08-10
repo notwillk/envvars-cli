@@ -15,13 +15,14 @@ USAGE:
 COMMANDS:
     help, -h, --help     Show this help message
     version, -v, --version  Show version information
-    env processor        Process environment variable files and output as JSON
+    merge               Process and merge environment variable files
 
 OPTIONS:
     -e, --env <file>     Read and parse environment variable files (can be specified multiple times)
     -f, --format <fmt>   Output format: json, yaml, or env (default: env)
     -j, --json <file>    Process a JSON file
     -y, --yaml <file>    Process a YAML file
+    -V, --verbose        Enable verbose output
 
 EXAMPLES:
     # Parse a single environment file (default ENV format)

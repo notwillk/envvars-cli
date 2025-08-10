@@ -10,8 +10,8 @@ import (
 // YAMLProcessor handles processing of YAML files
 type YAMLProcessor struct{}
 
-// NewYAMLProcessor creates a new YAML processor instance
-func NewYAMLProcessor() *YAMLProcessor {
+// CreateYAMLProcessor creates a new YAML processor instance
+func CreateYAMLProcessor() *YAMLProcessor {
 	return &YAMLProcessor{}
 }
 
