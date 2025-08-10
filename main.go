@@ -9,21 +9,10 @@ import (
 	"regexp"
 	"strings"
 
+	formatters "github.com/notwillk/envvars-cli/formatters"
+	"github.com/notwillk/envvars-cli/sources"
 	"github.com/spf13/pflag"
 )
-
-// EnvVar represents a single environment variable
-type EnvVar struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-	File  string `json:"file"`
-}
-
-// EnvFile represents a parsed environment file
-type EnvFile struct {
-	Filename  string   `json:"filename"`
-	Variables []EnvVar `json:"variables"`
-}
 
 func main() {
 	// Define flags
@@ -74,39 +63,131 @@ func main() {
 	}
 }
 
+// parseAndOutputEnvFiles processes environment files with optional merging
 func parseAndOutputEnvFiles(filePaths []string) error {
+	return parseAndOutputEnvFilesWithMerge(filePaths, nil, "")
+}
+
+// parseAndOutputEnvFilesWithMerge processes environment files with optional merging
+// existingKVs: map of existing key-value pairs to merge with
+// options: configuration options including file path
+func parseAndOutputEnvFilesWithMerge(filePaths []string, existingKVs map[string]string, optionsFile string) error {
 	// Collect all variables from all files into a single map
 	allVariables := make(map[string]string)
 
+	// If we have existing key-values, start with them
+	if existingKVs != nil {
+		for key, value := range existingKVs {
+			allVariables[key] = value
+		}
+	}
+
+	// Process all files
 	for _, filePath := range filePaths {
 		envFile, err := parseEnvFile(filePath)
 		if err != nil {
 			return fmt.Errorf("failed to parse file '%s': %w", filePath, err)
 		}
 
-		// Add variables to the combined map
+		// Add variables to the combined map (file values take precedence)
 		for _, variable := range envFile.Variables {
 			allVariables[variable.Key] = variable.Value
 		}
 	}
 
-	// Output as simple key-value JSON
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
+	// If options file is provided, also process that file
+	if optionsFile != "" {
+		options, err := parseOptionsFile(optionsFile)
+		if err != nil {
+			return fmt.Errorf("failed to parse options file: %w", err)
+		}
 
-	return encoder.Encode(allVariables)
+		if options.FilePath != "" {
+			envFile, err := parseEnvFile(options.FilePath)
+			if err != nil {
+				return fmt.Errorf("failed to parse options file path '%s': %w", options.FilePath, err)
+			}
+
+			// Add variables from options file (these take precedence)
+			for _, variable := range envFile.Variables {
+				allVariables[variable.Key] = variable.Value
+			}
+		}
+	}
+
+	// Output as simple key-value JSON using the formatters package
+	return formatters.OutputAsJSON(allVariables)
 }
 
-func parseEnvFile(filePath string) (EnvFile, error) {
+// ProcessFileWithMerge is the main function that takes existing key-value strings and options
+// and outputs merged key-value pairs with file values taking precedence
+func ProcessFileWithMerge(existingKVs map[string]string, options sources.Options) error {
+	// Use the sources package to process the merge
+	mergedVars, err := sources.ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		return err
+	}
+
+	// Output the merged result using the formatters package
+	return formatters.OutputAsJSON(mergedVars)
+}
+
+// parseKeyValueString parses a string in format "key1=value1,key2=value2"
+func parseKeyValueString(kvString string) (map[string]string, error) {
+	result := make(map[string]string)
+
+	pairs := strings.Split(kvString, ",")
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+
+		if strings.Contains(pair, "=") {
+			parts := strings.SplitN(pair, "=", 2)
+			key := strings.TrimSpace(parts[0])
+			value := ""
+			if len(parts) > 1 {
+				value = strings.TrimSpace(parts[1])
+			}
+
+			if key != "" {
+				result[key] = value
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// parseOptionsFile reads and parses a JSON options file
+func parseOptionsFile(filePath string) (sources.Options, error) {
+	var options sources.Options
+
 	file, err := os.Open(filePath)
 	if err != nil {
-		return EnvFile{}, fmt.Errorf("failed to open file '%s': %w", filePath, err)
+		return sources.Options{}, fmt.Errorf("failed to open options file '%s': %w", filePath, err)
 	}
 	defer file.Close()
 
-	envFile := EnvFile{
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&options); err != nil {
+		return sources.Options{}, fmt.Errorf("failed to decode options file '%s': %w", filePath, err)
+	}
+
+	return options, nil
+}
+
+func parseEnvFile(filePath string) (sources.EnvFile, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return sources.EnvFile{}, fmt.Errorf("failed to open file '%s': %w", filePath, err)
+	}
+	defer file.Close()
+
+	envFile := sources.EnvFile{
 		Filename:  filePath,
-		Variables: []EnvVar{},
+		Variables: []sources.EnvVar{},
 	}
 
 	// First pass: collect all variables
@@ -142,7 +223,7 @@ func parseEnvFile(filePath string) (EnvFile, error) {
 	// Second pass: resolve variable references
 	for key, value := range variables {
 		resolvedValue := resolveVariableReferences(value, variables)
-		envFile.Variables = append(envFile.Variables, EnvVar{
+		envFile.Variables = append(envFile.Variables, sources.EnvVar{
 			Key:   key,
 			Value: resolvedValue,
 			File:  filePath,
@@ -150,7 +231,7 @@ func parseEnvFile(filePath string) (EnvFile, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return EnvFile{}, fmt.Errorf("error reading file '%s': %w", filePath, err)
+		return sources.EnvFile{}, fmt.Errorf("error reading file '%s': %w", filePath, err)
 	}
 
 	return envFile, nil
@@ -261,6 +342,10 @@ func showHelp() {
 	fmt.Println("  Output format: simple key-value pairs without metadata")
 	fmt.Println("  Variable references (${VAR_NAME}) are resolved automatically")
 	fmt.Println("  Multiple files are merged into a single key-value object")
+	fmt.Println()
+	fmt.Println("Programmatic Usage:")
+	fmt.Println("  Use ProcessFileWithMerge(existingKVs, options) function for merging with existing values")
+	fmt.Println("  File values take precedence over existing values when merging")
 }
 
 func showVersion() {
