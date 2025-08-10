@@ -43,6 +43,21 @@ func (cmd *MergeCommand) Execute() error {
 	for _, source := range cmd.sources {
 		if cmd.options.Verbose {
 			fmt.Fprintf(os.Stderr, "Processing %s file: %s (priority: %d)\n", source.Type, source.FilePath, source.Priority)
+
+			// Show current state of merged variables before processing this source
+			if len(allVariables) > 0 {
+				fmt.Fprintf(os.Stderr, "Current merged variables (%d):\n", len(allVariables))
+				currentMap := make(map[string]string)
+				for _, envVar := range allVariables {
+					currentMap[envVar.Key] = envVar.Value
+				}
+				for key, value := range currentMap {
+					fmt.Fprintf(os.Stderr, "  %s=%s\n", key, value)
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "No variables merged yet\n")
+			}
+			fmt.Fprintf(os.Stderr, "\n")
 		}
 
 		var envFile sources.EnvFile
