@@ -37,7 +37,7 @@ func (cmd *MergeCommand) Execute() error {
 	}
 
 	// Process each source and merge the results
-	var allVariables []sources.EnvVar
+	variablesMap := make(map[string]string)
 
 	// Process sources in priority order (higher priority first)
 	for _, source := range cmd.sources {
@@ -45,13 +45,9 @@ func (cmd *MergeCommand) Execute() error {
 			fmt.Fprintf(os.Stderr, "Processing %s file: %s (priority: %d)\n", source.Type, source.FilePath, source.Priority)
 
 			// Show current state of merged variables before processing this source
-			if len(allVariables) > 0 {
-				fmt.Fprintf(os.Stderr, "Current merged variables (%d):\n", len(allVariables))
-				currentMap := make(map[string]string)
-				for _, envVar := range allVariables {
-					currentMap[envVar.Key] = envVar.Value
-				}
-				for key, value := range currentMap {
+			if len(variablesMap) > 0 {
+				fmt.Fprintf(os.Stderr, "Current merged variables (%d):\n", len(variablesMap))
+				for key, value := range variablesMap {
 					fmt.Fprintf(os.Stderr, "  %s=%s\n", key, value)
 				}
 			} else {
@@ -60,33 +56,46 @@ func (cmd *MergeCommand) Execute() error {
 			fmt.Fprintf(os.Stderr, "\n")
 		}
 
-		var envFile sources.EnvFile
 		var err error
 
 		switch source.Type {
 		case "json":
-			envFile, err = cmd.parseJSONFile(source.FilePath)
+			envFile, err := cmd.parseJSONFile(source.FilePath)
+			if err != nil {
+				return fmt.Errorf("failed to parse %s file '%s': %w", source.Type, source.FilePath, err)
+			}
+			// Merge JSON variables
+			for _, envVar := range envFile.Variables {
+				variablesMap[envVar.Key] = envVar.Value
+			}
 		case "yaml":
-			envFile, err = cmd.parseYAMLFile(source.FilePath)
+			envFile, err := cmd.parseYAMLFile(source.FilePath)
+			if err != nil {
+				return fmt.Errorf("failed to parse %s file '%s': %w", source.Type, source.FilePath, err)
+			}
+			// Merge YAML variables
+			for _, envVar := range envFile.Variables {
+				variablesMap[envVar.Key] = envVar.Value
+			}
 		case "env":
-			envFile, err = cmd.parseENVFile(source.FilePath)
+			// Use the directive-aware ProcessFileWithMerge function
+			options := sources.Options{FilePath: source.FilePath}
+			variablesMap, err = sources.ProcessFileWithMerge(variablesMap, options)
+			if err != nil {
+				return fmt.Errorf("failed to parse %s file '%s': %w", source.Type, source.FilePath, err)
+			}
 		case "sops":
-			envFile, err = cmd.parseSOPSFile(source.FilePath, source.DecryptionKey)
+			envFile, err := cmd.parseSOPSFile(source.FilePath, source.DecryptionKey)
+			if err != nil {
+				return fmt.Errorf("failed to parse %s file '%s': %w", source.Type, source.FilePath, err)
+			}
+			// Merge SOPS variables
+			for _, envVar := range envFile.Variables {
+				variablesMap[envVar.Key] = envVar.Value
+			}
 		default:
 			return fmt.Errorf("unsupported source type: %s", source.Type)
 		}
-
-		if err != nil {
-			return fmt.Errorf("failed to parse %s file '%s': %w", source.Type, source.FilePath, err)
-		}
-
-		allVariables = append(allVariables, envFile.Variables...)
-	}
-
-	// Convert to map for output formatting (later sources override earlier ones)
-	variablesMap := make(map[string]string)
-	for _, envVar := range allVariables {
-		variablesMap[envVar.Key] = envVar.Value
 	}
 
 	if cmd.options.Verbose {

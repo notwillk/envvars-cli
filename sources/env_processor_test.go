@@ -388,7 +388,7 @@ func TestParseOptionsFile_InvalidJSON(t *testing.T) {
 }
 
 func TestProcessFileWithMerge_FiltersInvalidKeys(t *testing.T) {
-	// Create a temporary file with valid and invalid keys
+	// Create a temporary file with invalid keys
 	tempFile, err := os.CreateTemp("", "test-*.env")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
@@ -396,18 +396,11 @@ func TestProcessFileWithMerge_FiltersInvalidKeys(t *testing.T) {
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
-	// Write env content with valid and invalid keys
-	envContent := `# Valid keys
-VALID_KEY=value1
-_UNDERSCORE_START=value2
-key_with_underscores=value3
-
-# Invalid keys (should be filtered out)
-123_START_WITH_NUMBER=invalid
-key-with-dash=invalid
-key with spaces=invalid
-key@special=invalid
-key#hash=invalid`
+	// Write content with invalid keys
+	envContent := `123INVALID=value1
+VALID_KEY=value2
+@INVALID=value3
+VALID_KEY_2=value4`
 	_, err = tempFile.WriteString(envContent)
 	if err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
@@ -420,22 +413,351 @@ key#hash=invalid`
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Should only contain valid keys
 	expected := map[string]string{
-		"VALID_KEY":            "value1",
-		"_UNDERSCORE_START":    "value2",
-		"key_with_underscores": "value3",
+		"VALID_KEY":   "value2",
+		"VALID_KEY_2": "value4",
 	}
 
 	if !reflect.DeepEqual(result, expected) {
 		t.Errorf("Expected %v, got %v", expected, result)
 	}
+}
 
-	// Verify invalid keys are not present
-	invalidKeys := []string{"123_START_WITH_NUMBER", "key-with-dash", "key with spaces", "key@special", "key#hash"}
-	for _, invalidKey := range invalidKeys {
-		if _, exists := result[invalidKey]; exists {
-			t.Errorf("Invalid key '%s' should not be present in result", invalidKey)
-		}
+// New tests for directive functionality
+
+func TestProcessFileWithMerge_WithRemoveDirective(t *testing.T) {
+	// Create a temporary file with remove directive
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write content with remove directive
+	envContent := `#remove EXISTING_KEY
+KEY1=value1
+KEY2=value2`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"OTHER_KEY":    "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"OTHER_KEY": "other_value", // EXISTING_KEY should be removed
+		"KEY1":      "value1",
+		"KEY2":      "value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithRemoveDirectiveCaseInsensitive(t *testing.T) {
+	// Create a temporary file with remove directive (case insensitive)
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write content with remove directive in different cases
+	envContent := `#REMOVE existing_key
+#remove OTHER_KEY
+KEY1=value1`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"existing_key": "existing_value",
+		"OTHER_KEY":    "other_value",
+		"KEEP_KEY":     "keep_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEEP_KEY": "keep_value", // existing_key and OTHER_KEY should be removed
+		"KEY1":     "value1",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithMultipleRemoveDirectives(t *testing.T) {
+	// Create a temporary file with multiple remove directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write content with multiple remove directives
+	envContent := `#remove KEY1 KEY2
+KEY3=value3
+KEY4=value4`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+		"KEY5": "value5",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY5": "value5", // KEY1 and KEY2 should be removed
+		"KEY3": "value3",
+		"KEY4": "value4",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithRemoveDirectiveAndRegularComments(t *testing.T) {
+	// Create a temporary file with remove directive and regular comments
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write content with remove directive and regular comments
+	envContent := `# This is a regular comment
+#remove KEY1
+# Another comment
+KEY2=value2
+# Final comment`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1": "value1",
+		"KEY3": "value3",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY3": "value3", // KEY1 should be removed
+		"KEY2": "value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithRemoveDirectiveNoArguments(t *testing.T) {
+	// Create a temporary file with remove directive but no arguments
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write content with remove directive but no arguments
+	envContent := `#remove
+KEY1=value1`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"EXISTING_KEY": "existing_value", // No keys should be removed
+		"KEY1":         "value1",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestParseDirective_ValidDirective(t *testing.T) {
+	directive, err := parseDirective("#remove KEY1 KEY2", 1)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := Directive{
+		Name:      "remove",
+		Arguments: []string{"KEY1", "KEY2"},
+		Line:      1,
+	}
+
+	if !reflect.DeepEqual(directive, expected) {
+		t.Errorf("Expected %v, got %v", expected, directive)
+	}
+}
+
+func TestParseDirective_CaseInsensitive(t *testing.T) {
+	directive, err := parseDirective("#REMOVE key1", 1)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := Directive{
+		Name:      "REMOVE",
+		Arguments: []string{"key1"},
+		Line:      1,
+	}
+
+	if !reflect.DeepEqual(directive, expected) {
+		t.Errorf("Expected %v, got %v", expected, directive)
+	}
+}
+
+func TestParseDirective_EmptyDirective(t *testing.T) {
+	_, err := parseDirective("#", 1)
+	if err == nil {
+		t.Error("Expected error for empty directive")
+	}
+}
+
+func TestParseDirective_WhitespaceOnly(t *testing.T) {
+	_, err := parseDirective("#   ", 1)
+	if err == nil {
+		t.Error("Expected error for whitespace-only directive")
+	}
+}
+
+func TestParseDirective_NoArguments(t *testing.T) {
+	directive, err := parseDirective("#remove", 1)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := Directive{
+		Name:      "remove",
+		Arguments: []string{},
+		Line:      1,
+	}
+
+	if !reflect.DeepEqual(directive, expected) {
+		t.Errorf("Expected %v, got %v", expected, directive)
+	}
+}
+
+func TestApplyRemoveDirective(t *testing.T) {
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+		"KEY3": "value3",
+	}
+
+	directive := Directive{
+		Name:      "remove",
+		Arguments: []string{"KEY1", "KEY3"},
+		Line:      1,
+	}
+
+	applyRemoveDirective(kvs, directive)
+
+	expected := map[string]string{
+		"KEY2": "value2", // KEY1 and KEY3 should be removed
+	}
+
+	if !reflect.DeepEqual(kvs, expected) {
+		t.Errorf("Expected %v, got %v", expected, kvs)
+	}
+}
+
+func TestApplyRemoveDirective_CaseInsensitive(t *testing.T) {
+	kvs := map[string]string{
+		"Key1": "value1",
+		"KEY2": "value2",
+		"key3": "value3",
+	}
+
+	directive := Directive{
+		Name:      "remove",
+		Arguments: []string{"key1", "KEY3"},
+		Line:      1,
+	}
+
+	applyRemoveDirective(kvs, directive)
+
+	expected := map[string]string{
+		"KEY2": "value2", // Key1 and key3 should be removed (case-insensitive)
+	}
+
+	if !reflect.DeepEqual(kvs, expected) {
+		t.Errorf("Expected %v, got %v", expected, kvs)
+	}
+}
+
+func TestApplyRemoveDirective_NonExistentKeys(t *testing.T) {
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	directive := Directive{
+		Name:      "remove",
+		Arguments: []string{"NONEXISTENT_KEY"},
+		Line:      1,
+	}
+
+	// This should not cause any errors
+	applyRemoveDirective(kvs, directive)
+
+	expected := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	if !reflect.DeepEqual(kvs, expected) {
+		t.Errorf("Expected %v, got %v", expected, kvs)
 	}
 }

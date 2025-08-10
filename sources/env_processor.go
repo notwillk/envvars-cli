@@ -9,6 +9,13 @@ import (
 	"strings"
 )
 
+// Directive represents a processing directive
+type Directive struct {
+	Name      string   `json:"name"`
+	Arguments []string `json:"arguments"`
+	Line      int      `json:"line"`
+}
+
 // Options contains configuration for file operations
 type Options struct {
 	FilePath string `json:"file_path"`
@@ -23,8 +30,9 @@ type EnvVar struct {
 
 // EnvFile represents a parsed environment file
 type EnvFile struct {
-	Filename  string   `json:"filename"`
-	Variables []EnvVar `json:"variables"`
+	Filename   string      `json:"filename"`
+	Variables  []EnvVar    `json:"variables"`
+	Directives []Directive `json:"directives"`
 }
 
 // ProcessFileWithMerge takes existing key-value pairs and options,
@@ -36,11 +44,14 @@ func ProcessFileWithMerge(existingKVs map[string]string, options Options) (map[s
 		return nil, fmt.Errorf("failed to parse file '%s': %w", options.FilePath, err)
 	}
 
+	// Apply directives to existing key-value pairs
+	processedKVs := applyDirectives(existingKVs, envFile.Directives)
+
 	// Merge variables (file values take precedence over existing values)
 	mergedVars := make(map[string]string)
 
-	// First, add existing variables
-	for key, value := range existingKVs {
+	// First, add existing variables (after directive processing)
+	for key, value := range processedKVs {
 		mergedVars[key] = value
 	}
 
@@ -50,6 +61,58 @@ func ProcessFileWithMerge(existingKVs map[string]string, options Options) (map[s
 	}
 
 	return mergedVars, nil
+}
+
+// applyDirectives applies all directives to the key-value pairs
+func applyDirectives(kvs map[string]string, directives []Directive) map[string]string {
+	result := make(map[string]string)
+
+	// Copy existing key-value pairs
+	for key, value := range kvs {
+		result[key] = value
+	}
+
+	// Apply each directive
+	for _, directive := range directives {
+		switch strings.ToLower(directive.Name) {
+		case "remove":
+			applyRemoveDirective(result, directive)
+		}
+	}
+
+	return result
+}
+
+// applyRemoveDirective removes environment variables based on the directive
+func applyRemoveDirective(kvs map[string]string, directive Directive) {
+	for _, arg := range directive.Arguments {
+		// Remove the specified key (case-insensitive)
+		for key := range kvs {
+			if strings.EqualFold(key, arg) {
+				delete(kvs, key)
+			}
+		}
+	}
+}
+
+// parseDirective parses a directive line
+func parseDirective(line string, lineNumber int) (Directive, error) {
+	// Remove the # prefix and trim whitespace
+	directiveText := strings.TrimSpace(strings.TrimPrefix(line, "#"))
+
+	// Split by whitespace to get directive name and arguments
+	parts := strings.Fields(directiveText)
+	if len(parts) == 0 {
+		return Directive{}, fmt.Errorf("empty directive at line %d", lineNumber)
+	}
+
+	directive := Directive{
+		Name:      parts[0],
+		Arguments: parts[1:],
+		Line:      lineNumber,
+	}
+
+	return directive, nil
 }
 
 // parseEnvFile reads and parses an environment variable file
@@ -63,18 +126,38 @@ func parseEnvFile(filePath string) (EnvFile, error) {
 	var envFile EnvFile
 	envFile.Filename = filePath
 	envFile.Variables = []EnvVar{}
+	envFile.Directives = []Directive{}
 
 	scanner := bufio.NewScanner(file)
 	lineNumber := 0
 	variables := make(map[string]string) // For variable reference resolution
 
-	// First pass: collect all variables
+	// First pass: collect all variables and directives
 	for scanner.Scan() {
 		lineNumber++
 		line := strings.TrimSpace(scanner.Text())
 
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Handle directives
+		if strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "# ") {
+			// Check if it's a directive (not a regular comment)
+			directiveText := strings.TrimSpace(strings.TrimPrefix(line, "#"))
+			if directiveText != "" && !strings.HasPrefix(directiveText, " ") {
+				directive, err := parseDirective(line, lineNumber)
+				if err != nil {
+					return EnvFile{}, fmt.Errorf("failed to parse directive at line %d: %w", lineNumber, err)
+				}
+				envFile.Directives = append(envFile.Directives, directive)
+				continue
+			}
+		}
+
+		// Skip regular comments
+		if strings.HasPrefix(line, "#") {
 			continue
 		}
 
@@ -104,8 +187,21 @@ func parseEnvFile(filePath string) (EnvFile, error) {
 		lineNumber++
 		line := strings.TrimSpace(scanner.Text())
 
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Handle directives (skip in second pass as they're already collected)
+		if strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "# ") {
+			directiveText := strings.TrimSpace(strings.TrimPrefix(line, "#"))
+			if directiveText != "" && !strings.HasPrefix(directiveText, " ") {
+				continue
+			}
+		}
+
+		// Skip regular comments
+		if strings.HasPrefix(line, "#") {
 			continue
 		}
 
