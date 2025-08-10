@@ -15,59 +15,90 @@ import (
 type EnvProcessorCommand struct {
 	filePaths []string
 	format    string
+	jsonFile  string
+	yamlFile  string
 }
 
 // NewEnvProcessorCommand creates a new environment processor command instance
-func NewEnvProcessorCommand(filePaths []string, format string) *EnvProcessorCommand {
+func NewEnvProcessorCommand(filePaths []string, format string, jsonFile string, yamlFile string) *EnvProcessorCommand {
 	return &EnvProcessorCommand{
 		filePaths: filePaths,
 		format:    format,
+		jsonFile:  jsonFile,
+		yamlFile:  yamlFile,
 	}
 }
 
 // Execute runs the environment processor command
 func (cmd *EnvProcessorCommand) Execute() error {
-	if len(cmd.filePaths) == 0 {
-		return fmt.Errorf("no files specified for merge command")
+	// Check if any files are specified
+	if len(cmd.filePaths) == 0 && cmd.jsonFile == "" && cmd.yamlFile == "" {
+		return fmt.Errorf("no files specified")
 	}
 
-	// Process all files and output as JSON
-	return cmd.parseAndOutputEnvFiles(cmd.filePaths)
-}
+	// Process each file and merge the results
+	var allVariables []sources.EnvVar
 
-// parseAndOutputEnvFiles processes environment files and outputs the result as JSON
-func (cmd *EnvProcessorCommand) parseAndOutputEnvFiles(filePaths []string) error {
-	// Collect all variables from all files into a single map
-	allVariables := make(map[string]string)
-
-	// Process all files
-	for _, filePath := range filePaths {
-		envFile, err := cmd.parseEnvFile(filePath)
+	// Process ENV files
+	for _, filePath := range cmd.filePaths {
+		envFile, err := cmd.parseENVFile(filePath)
 		if err != nil {
-			return fmt.Errorf("failed to parse file '%s': %w", filePath, err)
+			return fmt.Errorf("failed to parse ENV file '%s': %w", filePath, err)
 		}
-
-		// Add variables to the combined map (later files take precedence)
-		for _, variable := range envFile.Variables {
-			allVariables[variable.Key] = variable.Value
-		}
+		allVariables = append(allVariables, envFile.Variables...)
 	}
 
-	// Output using the selected format
+	// Process JSON file if specified
+	if cmd.jsonFile != "" {
+		envFile, err := cmd.parseJSONFile(cmd.jsonFile)
+		if err != nil {
+			return fmt.Errorf("failed to parse JSON file '%s': %w", cmd.jsonFile, err)
+		}
+		allVariables = append(allVariables, envFile.Variables...)
+	}
+
+	// Process YAML file if specified
+	if cmd.yamlFile != "" {
+		envFile, err := cmd.parseYAMLFile(cmd.yamlFile)
+		if err != nil {
+			return fmt.Errorf("failed to parse YAML file '%s': %w", cmd.yamlFile, err)
+		}
+		allVariables = append(allVariables, envFile.Variables...)
+	}
+
+	// Convert to map for output formatting
+	variablesMap := make(map[string]string)
+	for _, envVar := range allVariables {
+		variablesMap[envVar.Key] = envVar.Value
+	}
+
+	// Output in the specified format
 	switch cmd.format {
 	case "json":
-		return formatters.OutputAsJSON(allVariables)
+		return formatters.OutputAsJSON(variablesMap)
 	case "yaml":
-		return formatters.OutputAsYAML(allVariables)
+		return formatters.OutputAsYAML(variablesMap)
 	case "env":
-		fallthrough
+		return formatters.OutputAsENV(variablesMap)
 	default:
-		return formatters.OutputAsENV(allVariables)
+		return fmt.Errorf("unsupported output format: %s", cmd.format)
 	}
 }
 
 // parseEnvFile reads and parses an environment variable file
 func (cmd *EnvProcessorCommand) parseEnvFile(filePath string) (sources.EnvFile, error) {
+	// Use the specified format flags to determine how to parse the file
+	if cmd.jsonFile != "" && filePath == cmd.jsonFile {
+		return cmd.parseJSONFile(filePath)
+	} else if cmd.yamlFile != "" && filePath == cmd.yamlFile {
+		return cmd.parseYAMLFile(filePath)
+	} else {
+		return cmd.parseENVFile(filePath)
+	}
+}
+
+// parseENVFile reads and parses an environment variable file
+func (cmd *EnvProcessorCommand) parseENVFile(filePath string) (sources.EnvFile, error) {
 	// Use the sources package to parse the file
 	// Since parseEnvFile is private in sources, we'll implement the parsing here
 	file, err := os.Open(filePath)
@@ -151,6 +182,56 @@ func (cmd *EnvProcessorCommand) parseEnvFile(filePath string) (sources.EnvFile, 
 
 	if err := scanner.Err(); err != nil {
 		return sources.EnvFile{}, fmt.Errorf("error reading file '%s': %w", filePath, err)
+	}
+
+	return envFile, nil
+}
+
+// parseJSONFile reads and parses a JSON file
+func (cmd *EnvProcessorCommand) parseJSONFile(filePath string) (sources.EnvFile, error) {
+	processor := sources.NewJSONProcessor()
+	variables, err := processor.ProcessFile(filePath)
+	if err != nil {
+		return sources.EnvFile{}, fmt.Errorf("failed to parse JSON file '%s': %w", filePath, err)
+	}
+
+	envFile := sources.EnvFile{
+		Filename:  filePath,
+		Variables: []sources.EnvVar{},
+	}
+
+	// Convert map[string]string to []EnvVar
+	for key, value := range variables {
+		envFile.Variables = append(envFile.Variables, sources.EnvVar{
+			Key:   key,
+			Value: value,
+			File:  filePath,
+		})
+	}
+
+	return envFile, nil
+}
+
+// parseYAMLFile reads and parses a YAML file
+func (cmd *EnvProcessorCommand) parseYAMLFile(filePath string) (sources.EnvFile, error) {
+	processor := sources.NewYAMLProcessor()
+	variables, err := processor.ProcessFile(filePath)
+	if err != nil {
+		return sources.EnvFile{}, fmt.Errorf("failed to parse YAML file '%s': %w", filePath, err)
+	}
+
+	envFile := sources.EnvFile{
+		Filename:  filePath,
+		Variables: []sources.EnvVar{},
+	}
+
+	// Convert map[string]string to []EnvVar
+	for key, value := range variables {
+		envFile.Variables = append(envFile.Variables, sources.EnvVar{
+			Key:   key,
+			Value: value,
+			File:  filePath,
+		})
 	}
 
 	return envFile, nil
