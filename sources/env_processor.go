@@ -44,13 +44,13 @@ func ProcessFileWithMerge(existingKVs map[string]string, options Options) (map[s
 		return nil, fmt.Errorf("failed to parse file '%s': %w", options.FilePath, err)
 	}
 
-	// Apply directives to existing key-value pairs
-	processedKVs := applyDirectives(existingKVs, envFile.Directives)
+	// First, apply remove directives to existing key-value pairs
+	processedKVs := applyRemoveDirectives(existingKVs, envFile.Directives)
 
 	// Merge variables (file values take precedence over existing values)
 	mergedVars := make(map[string]string)
 
-	// First, add existing variables (after directive processing)
+	// First, add existing variables (after remove directive processing)
 	for key, value := range processedKVs {
 		mergedVars[key] = value
 	}
@@ -60,11 +60,16 @@ func ProcessFileWithMerge(existingKVs map[string]string, options Options) (map[s
 		mergedVars[variable.Key] = variable.Value
 	}
 
+	// Finally, apply require directives to the final merged result
+	if err := applyRequireDirectives(mergedVars, envFile.Directives); err != nil {
+		return nil, err
+	}
+
 	return mergedVars, nil
 }
 
-// applyDirectives applies all directives to the key-value pairs
-func applyDirectives(kvs map[string]string, directives []Directive) map[string]string {
+// applyRemoveDirectives applies only remove directives to the key-value pairs
+func applyRemoveDirectives(kvs map[string]string, directives []Directive) map[string]string {
 	result := make(map[string]string)
 
 	// Copy existing key-value pairs
@@ -72,15 +77,28 @@ func applyDirectives(kvs map[string]string, directives []Directive) map[string]s
 		result[key] = value
 	}
 
-	// Apply each directive
+	// Apply only remove directives
 	for _, directive := range directives {
-		switch strings.ToLower(directive.Name) {
-		case "remove":
+		if strings.ToLower(directive.Name) == "remove" {
 			applyRemoveDirective(result, directive)
 		}
 	}
 
 	return result
+}
+
+// applyRequireDirectives applies only require directives to the key-value pairs
+func applyRequireDirectives(kvs map[string]string, directives []Directive) error {
+	// Apply only require directives
+	for _, directive := range directives {
+		if strings.ToLower(directive.Name) == "require" {
+			if err := applyRequireDirective(kvs, directive); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // applyRemoveDirective removes environment variables based on the directive
@@ -93,6 +111,16 @@ func applyRemoveDirective(kvs map[string]string, directive Directive) {
 			}
 		}
 	}
+}
+
+// applyRequireDirective ensures required environment variables are present
+func applyRequireDirective(kvs map[string]string, directive Directive) error {
+	for _, arg := range directive.Arguments {
+		if _, exists := kvs[arg]; !exists {
+			return fmt.Errorf("required environment variable '%s' not found", arg)
+		}
+	}
+	return nil
 }
 
 // parseDirective parses a directive line

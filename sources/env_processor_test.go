@@ -761,3 +761,333 @@ func TestApplyRemoveDirective_NonExistentKeys(t *testing.T) {
 		t.Errorf("Expected %v, got %v", expected, kvs)
 	}
 }
+
+// Tests for #require directive
+
+func TestProcessFileWithMerge_WithRequireDirective(t *testing.T) {
+	// Create a temporary file with require directive
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with require directive
+	envContent := `#require EXISTING_KEY
+KEY1=value1
+KEY2=value2`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"OTHER_KEY":    "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"OTHER_KEY":    "other_value",
+		"KEY1":         "value1",
+		"KEY2":         "value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithRequireDirectiveFailure(t *testing.T) {
+	// Create a temporary file with require directive for non-existent key
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with require directive for non-existent key
+	envContent := `#require NONEXISTENT_KEY
+KEY1=value1`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	_, err = ProcessFileWithMerge(existingKVs, options)
+	if err == nil {
+		t.Error("Expected error for missing required environment variable")
+	}
+
+	expectedErrorMsg := "required environment variable 'NONEXISTENT_KEY' not found"
+	if err.Error() != expectedErrorMsg {
+		t.Errorf("Expected error message '%s', got: %s", expectedErrorMsg, err.Error())
+	}
+}
+
+func TestProcessFileWithMerge_WithRequireDirectiveCaseInsensitive(t *testing.T) {
+	// Create a temporary file with require directive using different case
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with require directive using different case
+	envContent := `#require existing_key
+KEY1=value1`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	_, err = ProcessFileWithMerge(existingKVs, options)
+	if err == nil {
+		t.Error("Expected error for missing required environment variable (case-sensitive)")
+	}
+
+	expectedErrorMsg := "required environment variable 'existing_key' not found"
+	if err.Error() != expectedErrorMsg {
+		t.Errorf("Expected error message '%s', got: %s", expectedErrorMsg, err.Error())
+	}
+}
+
+func TestProcessFileWithMerge_WithMultipleRequireDirectives(t *testing.T) {
+	// Create a temporary file with multiple require directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with multiple require directives
+	envContent := `#require EXISTING_KEY1
+#require EXISTING_KEY2
+KEY1=value1`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY1": "existing_value1",
+		"EXISTING_KEY2": "existing_value2",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"EXISTING_KEY1": "existing_value1",
+		"EXISTING_KEY2": "existing_value2",
+		"KEY1":          "value1",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithRequireDirectiveAndRegularComments(t *testing.T) {
+	// Create a temporary file with require directive and regular comments
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with require directive and regular comments
+	envContent := `# This is a regular comment
+#require EXISTING_KEY
+# Another comment
+KEY1=value1`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "value1",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithRequireDirectiveNoArguments(t *testing.T) {
+	// Create a temporary file with require directive but no arguments
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with require directive but no arguments
+	envContent := `#require
+KEY1=value1`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// No arguments means no requirements to check, so it should succeed
+	expected := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "value1",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithRequireAndRemoveDirectives(t *testing.T) {
+	// Create a temporary file with both require and remove directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with both require and remove directives
+	envContent := `#require EXISTING_KEY1
+#remove EXISTING_KEY2
+KEY1=value1`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY1": "existing_value1",
+		"EXISTING_KEY2": "existing_value2",
+		"OTHER_KEY":     "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"EXISTING_KEY1": "existing_value1", // Required and kept
+		"OTHER_KEY":     "other_value",     // Kept
+		"KEY1":          "value1",          // Added from file
+		// EXISTING_KEY2 should be removed by #remove directive
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestApplyRequireDirective(t *testing.T) {
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+		"KEY3": "value3",
+	}
+
+	directive := Directive{
+		Name:      "require",
+		Arguments: []string{"KEY1", "KEY2"},
+		Line:      1,
+	}
+
+	// This should succeed
+	err := applyRequireDirective(kvs, directive)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+}
+
+func TestApplyRequireDirective_MissingKey(t *testing.T) {
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	directive := Directive{
+		Name:      "require",
+		Arguments: []string{"KEY1", "MISSING_KEY"},
+		Line:      1,
+	}
+
+	// This should fail
+	err := applyRequireDirective(kvs, directive)
+	if err == nil {
+		t.Error("Expected error for missing required key")
+	}
+
+	expectedErrorMsg := "required environment variable 'MISSING_KEY' not found"
+	if err.Error() != expectedErrorMsg {
+		t.Errorf("Expected error message '%s', got: %s", expectedErrorMsg, err.Error())
+	}
+}
+
+func TestApplyRequireDirective_NoArguments(t *testing.T) {
+	kvs := map[string]string{
+		"KEY1": "value1",
+	}
+
+	directive := Directive{
+		Name:      "require",
+		Arguments: []string{},
+		Line:      1,
+	}
+
+	// This should succeed (no requirements to check)
+	err := applyRequireDirective(kvs, directive)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+}

@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"regexp"
@@ -113,96 +112,6 @@ func (cmd *MergeCommand) Execute() error {
 	default:
 		return fmt.Errorf("unsupported output format: %s", cmd.options.Format)
 	}
-}
-
-// parseENVFile reads and parses an environment variable file
-func (cmd *MergeCommand) parseENVFile(filePath string) (sources.EnvFile, error) {
-	// Use the sources package to parse the file
-	// Since parseEnvFile is private in sources, we'll implement the parsing here
-	file, err := os.Open(filePath)
-	if err != nil {
-		return sources.EnvFile{}, fmt.Errorf("failed to open file '%s': %w", filePath, err)
-	}
-	defer file.Close()
-
-	envFile := sources.EnvFile{
-		Filename:  filePath,
-		Variables: []sources.EnvVar{},
-	}
-
-	scanner := bufio.NewScanner(file)
-	lineNumber := 0
-	variables := make(map[string]string) // For variable reference resolution
-
-	// First pass: collect all variables
-	for scanner.Scan() {
-		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Parse key=value pairs
-		if strings.Contains(line, "=") {
-			parts := strings.SplitN(line, "=", 2)
-			key := strings.TrimSpace(parts[0])
-			value := ""
-			if len(parts) > 1 {
-				value = strings.TrimSpace(parts[1])
-			}
-
-			if key != "" {
-				// Unquote the value
-				value = cmd.unquoteValue(value)
-				variables[key] = value
-			}
-		}
-	}
-
-	// Second pass: resolve variable references and create EnvVar structs
-	file.Seek(0, 0) // Reset file pointer
-	scanner = bufio.NewScanner(file)
-	lineNumber = 0
-
-	for scanner.Scan() {
-		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Parse key=value pairs
-		if strings.Contains(line, "=") {
-			parts := strings.SplitN(line, "=", 2)
-			key := strings.TrimSpace(parts[0])
-			value := ""
-			if len(parts) > 1 {
-				value = strings.TrimSpace(parts[1])
-			}
-
-			if key != "" {
-				// Unquote the value
-				value = cmd.unquoteValue(value)
-				// Resolve variable references
-				resolvedValue := cmd.resolveVariableReferences(value, variables)
-				envFile.Variables = append(envFile.Variables, sources.EnvVar{
-					Key:   key,
-					Value: resolvedValue,
-					File:  filePath,
-				})
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return sources.EnvFile{}, fmt.Errorf("error reading file '%s': %w", filePath, err)
-	}
-
-	return envFile, nil
 }
 
 // parseJSONFile reads and parses a JSON file
