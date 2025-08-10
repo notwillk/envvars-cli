@@ -14,12 +14,14 @@ import (
 // EnvProcessorCommand handles the environment processing functionality
 type EnvProcessorCommand struct {
 	filePaths []string
+	format    string
 }
 
 // NewEnvProcessorCommand creates a new environment processor command instance
-func NewEnvProcessorCommand(filePaths []string) *EnvProcessorCommand {
+func NewEnvProcessorCommand(filePaths []string, format string) *EnvProcessorCommand {
 	return &EnvProcessorCommand{
 		filePaths: filePaths,
+		format:    format,
 	}
 }
 
@@ -51,8 +53,17 @@ func (cmd *EnvProcessorCommand) parseAndOutputEnvFiles(filePaths []string) error
 		}
 	}
 
-	// Output as simple key-value JSON using the formatters package
-	return formatters.OutputAsJSON(allVariables)
+	// Output using the selected format
+	switch cmd.format {
+	case "json":
+		return formatters.OutputAsJSON(allVariables)
+	case "yaml":
+		return formatters.OutputAsYAML(allVariables)
+	case "env":
+		fallthrough
+	default:
+		return formatters.OutputAsENV(allVariables)
+	}
 }
 
 // parseEnvFile reads and parses an environment variable file

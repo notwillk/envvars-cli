@@ -19,13 +19,23 @@ COMMANDS:
 
 OPTIONS:
     -e, --env <file>     Read and parse environment variable files (can be specified multiple times)
+    -f, --format <fmt>   Output format: json, yaml, or env (default: env)
 
 EXAMPLES:
-    # Parse a single environment file
+    # Parse a single environment file (default ENV format)
     envvars-cli --env config.env
 
     # Parse multiple environment files
     envvars-cli --env dev.env --env prod.env
+
+    # Output as JSON
+    envvars-cli --env config.env --format json
+
+    # Output as YAML
+    envvars-cli --env config.env --format yaml
+
+    # Output as ENV (default)
+    envvars-cli --env config.env --format env
 
     # Show help
     envvars-cli --help
