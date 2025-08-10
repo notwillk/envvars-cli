@@ -17,7 +17,7 @@ func main() {
 	// Set up flags
 	pflag.BoolVarP(&help, "help", "h", false, "Show this help message")
 	pflag.BoolVarP(&version, "version", "v", false, "Show version information")
-	pflag.StringSliceVarP(&filePaths, "file", "f", []string{}, "Read and parse environment variable files (can be specified multiple times)")
+	pflag.StringSliceVarP(&filePaths, "env", "e", []string{}, "Read and parse environment variable files (can be specified multiple times)")
 
 	// Parse flags
 	pflag.Parse()
@@ -34,10 +34,10 @@ func main() {
 		return
 	}
 
-	// Handle file flags (merge command)
+	// Handle env flags (environment processor command)
 	if len(filePaths) > 0 {
-		mergeCmd := commands.NewMergeCommand(filePaths)
-		if err := mergeCmd.Execute(); err != nil {
+		envProcessorCmd := commands.NewEnvProcessorCommand(filePaths)
+		if err := envProcessorCmd.Execute(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}

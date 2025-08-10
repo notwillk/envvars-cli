@@ -11,20 +11,20 @@ import (
 	"github.com/notwillk/envvars-cli/sources"
 )
 
-// MergeCommand handles the merge functionality for processing environment files
-type MergeCommand struct {
+// EnvProcessorCommand handles the environment processing functionality
+type EnvProcessorCommand struct {
 	filePaths []string
 }
 
-// NewMergeCommand creates a new merge command instance
-func NewMergeCommand(filePaths []string) *MergeCommand {
-	return &MergeCommand{
+// NewEnvProcessorCommand creates a new environment processor command instance
+func NewEnvProcessorCommand(filePaths []string) *EnvProcessorCommand {
+	return &EnvProcessorCommand{
 		filePaths: filePaths,
 	}
 }
 
-// Execute runs the merge command
-func (cmd *MergeCommand) Execute() error {
+// Execute runs the environment processor command
+func (cmd *EnvProcessorCommand) Execute() error {
 	if len(cmd.filePaths) == 0 {
 		return fmt.Errorf("no files specified for merge command")
 	}
@@ -34,7 +34,7 @@ func (cmd *MergeCommand) Execute() error {
 }
 
 // parseAndOutputEnvFiles processes environment files and outputs the result as JSON
-func (cmd *MergeCommand) parseAndOutputEnvFiles(filePaths []string) error {
+func (cmd *EnvProcessorCommand) parseAndOutputEnvFiles(filePaths []string) error {
 	// Collect all variables from all files into a single map
 	allVariables := make(map[string]string)
 
@@ -56,7 +56,7 @@ func (cmd *MergeCommand) parseAndOutputEnvFiles(filePaths []string) error {
 }
 
 // parseEnvFile reads and parses an environment variable file
-func (cmd *MergeCommand) parseEnvFile(filePath string) (sources.EnvFile, error) {
+func (cmd *EnvProcessorCommand) parseEnvFile(filePath string) (sources.EnvFile, error) {
 	// Use the sources package to parse the file
 	// Since parseEnvFile is private in sources, we'll implement the parsing here
 	file, err := os.Open(filePath)
@@ -146,7 +146,7 @@ func (cmd *MergeCommand) parseEnvFile(filePath string) (sources.EnvFile, error) 
 }
 
 // unquoteValue removes quotes from a value if present
-func (cmd *MergeCommand) unquoteValue(value string) string {
+func (cmd *EnvProcessorCommand) unquoteValue(value string) string {
 	value = strings.TrimSpace(value)
 
 	// Remove single quotes
@@ -163,7 +163,7 @@ func (cmd *MergeCommand) unquoteValue(value string) string {
 }
 
 // resolveVariableReferences resolves ${VAR_NAME} references in values
-func (cmd *MergeCommand) resolveVariableReferences(value string, variables map[string]string) string {
+func (cmd *EnvProcessorCommand) resolveVariableReferences(value string, variables map[string]string) string {
 	// Use regex to find and replace variable references
 	re := regexp.MustCompile(`\$\{([^}]+)\}`)
 	return re.ReplaceAllStringFunc(value, func(match string) string {

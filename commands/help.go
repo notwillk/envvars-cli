@@ -15,17 +15,17 @@ USAGE:
 COMMANDS:
     help, -h, --help     Show this help message
     version, -v, --version  Show version information
-    merge                Merge environment variables with existing key-value pairs
+    env processor        Process environment variable files and output as JSON
 
 OPTIONS:
-    -f, --file <file>    Read and parse environment variable files (can be specified multiple times)
+    -e, --env <file>     Read and parse environment variable files (can be specified multiple times)
 
 EXAMPLES:
     # Parse a single environment file
-    envvars-cli --file config.env
+    envvars-cli --env config.env
 
     # Parse multiple environment files
-    envvars-cli --file dev.env --file prod.env
+    envvars-cli --env dev.env --env prod.env
 
     # Show help
     envvars-cli --help
