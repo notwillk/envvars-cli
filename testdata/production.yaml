@@ -1,0 +1,36 @@
+environment: production
+debug: false
+
+services:
+  web:
+    port: 8080
+    workers: 4
+    secret_key: web_secret_key_12345
+  
+  database:
+    primary:
+      host: db-primary.prod.example.com
+      port: 5432
+      username: prod_user
+      password: very_secure_password_456
+      ssl_mode: require
+    replica:
+      host: db-replica.prod.example.com
+      port: 5432
+      username: readonly_user
+      password: readonly_pass_789
+      ssl_mode: require
+
+monitoring:
+  enabled: true
+  api_key: monitoring_key_abc123
+  endpoints:
+    - https://metrics.prod.example.com
+    - https://logs.prod.example.com
+
+security:
+  jwt_secret: super_secret_jwt_key_xyz789
+  encryption_key: encryption_key_123456
+  allowed_origins:
+    - https://app.prod.example.com
+    - https://admin.prod.example.com

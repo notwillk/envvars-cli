@@ -70,6 +70,8 @@ func (cmd *MergeCommand) Execute() error {
 			envFile, err = cmd.parseYAMLFile(source.FilePath)
 		case "env":
 			envFile, err = cmd.parseENVFile(source.FilePath)
+		case "sops":
+			envFile, err = cmd.parseSOPSFile(source.FilePath, source.DecryptionKey)
 		default:
 			return fmt.Errorf("unsupported source type: %s", source.Type)
 		}
@@ -239,6 +241,22 @@ func (cmd *MergeCommand) parseYAMLFile(filePath string) (sources.EnvFile, error)
 			Value: value,
 			File:  filePath,
 		})
+	}
+
+	return envFile, nil
+}
+
+// parseSOPSFile reads and parses a SOPS-encrypted file
+func (cmd *MergeCommand) parseSOPSFile(filePath string, decryptionKey string) (sources.EnvFile, error) {
+	processor := sources.CreateSOPSProcessor()
+	variables, err := processor.ProcessFile(filePath, decryptionKey)
+	if err != nil {
+		return sources.EnvFile{}, fmt.Errorf("failed to parse SOPS file '%s': %w", filePath, err)
+	}
+
+	envFile := sources.EnvFile{
+		Filename:  filePath,
+		Variables: variables,
 	}
 
 	return envFile, nil

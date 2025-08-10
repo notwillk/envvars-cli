@@ -22,6 +22,7 @@ OPTIONS:
     -f, --format <fmt>   Output format: json, yaml, or env (default: env)
     -j, --json <file>    Process a JSON file
     -y, --yaml <file>    Process a YAML file
+    -s, --sops <key@file> Process SOPS-encrypted files in format [key_name]@[path-to-file] (can be specified multiple times)
     -V, --verbose        Enable verbose output
 
 EXAMPLES:
@@ -51,6 +52,10 @@ EXAMPLES:
     # Mix different file types
     envvars-cli --env config.env --json config.json --yaml config.yaml
 
+    # Process SOPS-encrypted files
+    envvars-cli --sops "age1key123@secrets.enc.yaml"
+    envvars-cli --sops "age1key123@secrets.enc.yaml" --format json
+
     # Show help
     envvars-cli --help
 
@@ -59,7 +64,8 @@ EXAMPLES:
 
 DESCRIPTION:
     envvars-cli is a command-line tool for parsing and processing environment variable files.
-    It supports parsing .env, .json, and .yaml files with comments, quoted values, and variable references.
+    It supports parsing .env, .json, .yaml, and SOPS-encrypted files with comments, quoted values, and variable references.
     Multiple files can be processed, with later files taking precedence over earlier ones.
+    SOPS files are automatically decrypted using the provided decryption key before processing.
 `)
 }

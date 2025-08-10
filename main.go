@@ -17,6 +17,7 @@ func main() {
 	var format string
 	var jsonFile string
 	var yamlFile string
+	var sopsSources []string
 	var verbose bool
 
 	// Set up flags
@@ -26,6 +27,7 @@ func main() {
 	pflag.StringVarP(&format, "format", "f", "env", "Output format: json, yaml, or env (default: env)")
 	pflag.StringVarP(&jsonFile, "json", "j", "", "Process a JSON file")
 	pflag.StringVarP(&yamlFile, "yaml", "y", "", "Process a YAML file")
+	pflag.StringSliceVarP(&sopsSources, "sops", "s", []string{}, "Process SOPS-encrypted files in format [key_name]@[path-to-file] (can be specified multiple times)")
 	pflag.BoolVarP(&verbose, "verbose", "V", false, "Enable verbose output")
 
 	// Parse flags
@@ -43,8 +45,8 @@ func main() {
 		return
 	}
 
-	// Handle env flags (environment processor command)
-	if len(filePaths) > 0 || jsonFile != "" || yamlFile != "" {
+	// Handle env, json, yaml, or sops flags (environment processor command)
+	if len(filePaths) > 0 || jsonFile != "" || yamlFile != "" || len(sopsSources) > 0 {
 		// Create sources array with metadata
 		var sources []commands.Source
 		priority := 0
@@ -88,7 +90,38 @@ func main() {
 					priority++
 					i++ // Skip the file path in next iteration
 				}
+			case "--sops", "-s":
+				// Find the corresponding file path
+				if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+					sources = append(sources, commands.Source{
+						FilePath: os.Args[i+1],
+						Type:     "sops",
+						Priority: priority,
+					})
+					priority++
+					i++ // Skip the file path in next iteration
+				}
 			}
+		}
+
+		// Process SOPS sources in the format [key_name]@[path-to-file]
+		for _, sopsSource := range sopsSources {
+			parts := strings.SplitN(sopsSource, "@", 2)
+			if len(parts) != 2 {
+				fmt.Fprintf(os.Stderr, "Warning: Invalid SOPS source format '%s'. Expected format: [key_name]@[path-to-file]\n", sopsSource)
+				continue
+			}
+
+			decryptionKey := parts[0]
+			filePath := parts[1]
+
+			sources = append(sources, commands.Source{
+				FilePath:      filePath,
+				Type:          "sops",
+				Priority:      priority,
+				DecryptionKey: decryptionKey,
+			})
+			priority++
 		}
 
 		// Create global options
