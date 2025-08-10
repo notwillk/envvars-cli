@@ -1,0 +1,41 @@
+{
+	"name": "Go Development",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/go:1": {
+			"version": "1.21"
+		},
+		"ghcr.io/devcontainers/features/git:1": {},
+		"ghcr.io/devcontainers/features/github-cli:1": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.go",
+				"ms-vscode.go",
+				"ms-vscode.vscode-json",
+				"ms-vscode.vscode-yaml",
+				"streetsidesoftware.code-spell-checker",
+				"eamodio.gitlens"
+			],
+			"settings": {
+				"go.useLanguageServer": true,
+				"go.gopath": "/go",
+				"go.toolsManagement.checkForUpdates": "local",
+				"go.goroot": "/usr/local/go",
+				"go.lintOnSave": "package",
+				"go.vetOnSave": "package",
+				"go.buildOnSave": "package",
+				"go.testOnSave": false,
+				"go.coverOnSave": false,
+				"go.gocodeAutoBuild": false
+			}
+		}
+	},
+	"postCreateCommand": "go mod tidy",
+	"remoteUser": "vscode",
+	"mounts": []
+}
+
