@@ -1,8 +1,6 @@
 {
 	"name": "Go Development",
-	"build": {
-		"dockerfile": "Dockerfile"
-	},
+	"image": "mcr.microsoft.com/devcontainers/go:1.21",
 	"features": {},
 	"customizations": {
 		"vscode": {
@@ -28,7 +26,7 @@
 			}
 		}
 	},
-	"postCreateCommand": "go mod tidy",
+	"postCreateCommand": "bash -lc 'set -euo pipefail; sudo apt-get update && sudo apt-get -y install --no-install-recommends curl wget git vim nano htop tree jq unzip zip ca-certificates gnupg lsb-release && sudo rm -rf /var/lib/apt/lists/*; if ! command -v yq >/dev/null 2>&1; then sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq; fi; export PATH=\"$PATH:/go/bin\"; go install golang.org/x/tools/cmd/goimports@latest && go install github.com/cweill/gotests/gotests@latest && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && go install github.com/go-delve/delve/cmd/dlv@latest && go install github.com/uudashr/gopkgs/v2/cmd/gopkgs@latest && go install github.com/axw/gocov/gocov@latest; go mod tidy'",
 	"remoteUser": "vscode",
 	"mounts": []
 }
