@@ -11,14 +11,15 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         htop \
         tree \
         jq \
-        yq \
         unzip \
         zip \
         ca-certificates \
         gnupg \
         lsb-release \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 \
+    && chmod +x /usr/local/bin/yq
 
 # Install Go tools
 RUN go install golang.org/x/tools/cmd/goimports@latest \
