@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "API_KEY": {
+      "type": "string",
+      "minLength": 1
+    },
+    "APP_NAME": {
+      "type": "string",
+      "minLength": 1
+    },
+    "DEBUG": {
+      "type": "boolean"
+    },
+    "PORT": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    }
+  },
+  "required": ["API_KEY", "APP_NAME"]
+}
