@@ -51,6 +51,30 @@ func (p *SOPSProcessor) ProcessFile(filePath string, decryptionKey string) ([]En
 	return variables, nil
 }
 
+// ProcessFileWithMerge merges existing key-value pairs with those from a SOPS file
+func (p *SOPSProcessor) ProcessFileWithMerge(existingKVs map[string]string, options Options) (map[string]string, error) {
+	// Process the SOPS file to get variables
+	variables, err := p.ProcessFile(options.FilePath, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to process SOPS file: %w", err)
+	}
+
+	// Merge variables (file values take precedence over existing values)
+	mergedVars := make(map[string]string)
+
+	// First, add existing variables
+	for key, value := range existingKVs {
+		mergedVars[key] = value
+	}
+
+	// Then, add file variables (overriding existing ones)
+	for _, variable := range variables {
+		mergedVars[variable.Key] = variable.Value
+	}
+
+	return mergedVars, nil
+}
+
 // flattenMap recursively flattens a nested map into key-value pairs
 func (p *SOPSProcessor) flattenMap(prefix string, data map[string]interface{}, variables *[]EnvVar) {
 	for key, value := range data {

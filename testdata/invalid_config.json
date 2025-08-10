@@ -1,5 +1,0 @@
-{
-  "$schema": "./config_schema.json",
-  "DEBUG": "not_a_boolean",
-  "PORT": "not_a_number"
-}

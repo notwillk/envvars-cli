@@ -91,14 +91,8 @@ func main() {
 					i++ // Skip the file path in next iteration
 				}
 			case "--sops", "-s":
-				// Find the corresponding file path
+				// Skip SOPS sources here - they're processed separately below
 				if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
-					sources = append(sources, commands.Source{
-						FilePath: os.Args[i+1],
-						Type:     "sops",
-						Priority: priority,
-					})
-					priority++
 					i++ // Skip the file path in next iteration
 				}
 			}
