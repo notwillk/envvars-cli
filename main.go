@@ -1,12 +1,29 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/spf13/pflag"
 )
+
+// EnvVar represents a single environment variable
+type EnvVar struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	File  string `json:"file"`
+}
+
+// EnvFile represents a parsed environment file
+type EnvFile struct {
+	Filename  string   `json:"filename"`
+	Variables []EnvVar `json:"variables"`
+}
 
 func main() {
 	// Define flags
@@ -17,7 +34,7 @@ func main() {
 	// Set up flags
 	pflag.BoolVarP(&help, "help", "h", false, "Show this help message")
 	pflag.BoolVarP(&version, "version", "v", false, "Show version information")
-	pflag.StringSliceVarP(&filePaths, "file", "f", []string{}, "Read and output the contents of files (can be specified multiple times)")
+	pflag.StringSliceVarP(&filePaths, "file", "f", []string{}, "Read and parse environment variable files (can be specified multiple times)")
 
 	// Parse flags
 	pflag.Parse()
@@ -36,8 +53,8 @@ func main() {
 
 	// Handle file flags
 	if len(filePaths) > 0 {
-		if err := readAndOutputFiles(filePaths); err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading files: %v\n", err)
+		if err := parseAndOutputEnvFiles(filePaths); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing files: %v\n", err)
 			os.Exit(1)
 		}
 		return
@@ -55,6 +72,125 @@ func main() {
 	if wd, err := os.Getwd(); err == nil {
 		fmt.Printf("Working directory: %s\n", wd)
 	}
+}
+
+func parseAndOutputEnvFiles(filePaths []string) error {
+	// Collect all variables from all files into a single map
+	allVariables := make(map[string]string)
+
+	for _, filePath := range filePaths {
+		envFile, err := parseEnvFile(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to parse file '%s': %w", filePath, err)
+		}
+
+		// Add variables to the combined map
+		for _, variable := range envFile.Variables {
+			allVariables[variable.Key] = variable.Value
+		}
+	}
+
+	// Output as simple key-value JSON
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+
+	return encoder.Encode(allVariables)
+}
+
+func parseEnvFile(filePath string) (EnvFile, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return EnvFile{}, fmt.Errorf("failed to open file '%s': %w", filePath, err)
+	}
+	defer file.Close()
+
+	envFile := EnvFile{
+		Filename:  filePath,
+		Variables: []EnvVar{},
+	}
+
+	// First pass: collect all variables
+	variables := make(map[string]string)
+	scanner := bufio.NewScanner(file)
+	lineNum := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Parse key=value
+		if strings.Contains(line, "=") {
+			parts := strings.SplitN(line, "=", 2)
+			key := strings.TrimSpace(parts[0])
+			value := ""
+			if len(parts) > 1 {
+				value = strings.TrimSpace(parts[1])
+			}
+
+			// Remove quotes if present
+			value = unquoteValue(value)
+
+			variables[key] = value
+		}
+	}
+
+	// Second pass: resolve variable references
+	for key, value := range variables {
+		resolvedValue := resolveVariableReferences(value, variables)
+		envFile.Variables = append(envFile.Variables, EnvVar{
+			Key:   key,
+			Value: resolvedValue,
+			File:  filePath,
+		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		return EnvFile{}, fmt.Errorf("error reading file '%s': %w", filePath, err)
+	}
+
+	return envFile, nil
+}
+
+func unquoteValue(value string) string {
+	value = strings.TrimSpace(value)
+
+	// Remove double quotes
+	if strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`) {
+		value = strings.TrimPrefix(value, `"`)
+		value = strings.TrimSuffix(value, `"`)
+		// Unescape quotes
+		value = strings.ReplaceAll(value, `\"`, `"`)
+	}
+
+	// Remove single quotes
+	if strings.HasPrefix(value, `'`) && strings.HasSuffix(value, `'`) {
+		value = strings.TrimPrefix(value, `'`)
+		value = strings.TrimSuffix(value, `'`)
+		// Unescape apostrophes
+		value = strings.ReplaceAll(value, `\'`, `'`)
+	}
+
+	return value
+}
+
+func resolveVariableReferences(value string, variables map[string]string) string {
+	// Simple variable reference resolution: ${VAR_NAME}
+	re := regexp.MustCompile(`\$\{([^}]+)\}`)
+
+	return re.ReplaceAllStringFunc(value, func(match string) string {
+		// Extract variable name from ${VAR_NAME}
+		varName := match[2 : len(match)-1]
+		if resolvedValue, exists := variables[varName]; exists {
+			return resolvedValue
+		}
+		// If variable not found, return the original match
+		return match
+	})
 }
 
 func readAndOutputFiles(filePaths []string) error {
@@ -107,7 +243,7 @@ func showHelp() {
 	fmt.Println("Flags:")
 	fmt.Println("  -h, --help      Show this help message")
 	fmt.Println("  -v, --version   Show version information")
-	fmt.Println("  -f, --file      Read and output the contents of files (can be specified multiple times)")
+	fmt.Println("  -f, --file      Read and parse environment variable files (can be specified multiple times)")
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  TODO: Add your CLI commands here")
@@ -115,10 +251,16 @@ func showHelp() {
 	fmt.Println("Examples:")
 	fmt.Println("  envvars-cli --help")
 	fmt.Println("  envvars-cli --version")
-	fmt.Println("  envvars-cli --file example.txt")
-	fmt.Println("  envvars-cli -f /path/to/file.txt")
-	fmt.Println("  envvars-cli --file file1.txt --file file2.txt")
-	fmt.Println("  envvars-cli -f file1.txt -f file2.txt -f file3.txt")
+	fmt.Println("  envvars-cli --file example.env")
+	fmt.Println("  envvars-cli -f /path/to/file.env")
+	fmt.Println("  envvars-cli --file file1.env --file file2.env")
+	fmt.Println("  envvars-cli -f file1.env -f file2.env -f file3.env")
+	fmt.Println()
+	fmt.Println("Output:")
+	fmt.Println("  Files are parsed as environment variable files and output as JSON")
+	fmt.Println("  Output format: simple key-value pairs without metadata")
+	fmt.Println("  Variable references (${VAR_NAME}) are resolved automatically")
+	fmt.Println("  Multiple files are merged into a single key-value object")
 }
 
 func showVersion() {
