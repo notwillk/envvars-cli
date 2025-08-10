@@ -1,5 +1,11 @@
 package main
 
+// Available dependencies for future features:
+// - github.com/aws/aws-sdk-go-v2/service/secretsmanager (AWS Secrets Manager integration)
+// - github.com/getsops/sops/v3 (SOPS encryption/decryption)
+// - github.com/santhosh-tekuri/jsonschema/v6 (JSON Schema validation)
+// - gopkg.in/yaml.v3 (YAML processing)
+
 import (
 	"fmt"
 	"os"
