@@ -1600,3 +1600,449 @@ func TestMatchesPattern_ComplexWildcardPatterns(t *testing.T) {
 		}
 	}
 }
+
+// Tests for #filter-unless directive
+
+func TestProcessFileWithMerge_WithFilterUnlessDirective(t *testing.T) {
+	// Create a temporary file with filter-unless directive
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter-unless directive
+	envContent := `#filter-unless KEY1 KEY2
+KEY3=value3
+KEY4=value4`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "old_value",
+		"KEY2":         "old_value2",
+		"KEY3":         "old_value3",
+		"KEY4":         "old_value4",
+		"OTHER_KEY":    "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY1": "old_value",
+		"KEY2": "old_value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterUnlessDirectiveCaseInsensitive(t *testing.T) {
+	// Create a temporary file with filter-unless directive (case-insensitive)
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter-unless directive (case-insensitive)
+	envContent := `#filter-unless key1 KEY2
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1":      "old_value",
+		"KEY2":      "old_value2",
+		"KEY3":      "old_value3",
+		"OTHER_KEY": "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY1": "old_value",
+		"KEY2": "old_value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterUnlessDirectiveWildcardPatterns(t *testing.T) {
+	// Create a temporary file with filter-unless directive using wildcards
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter-unless directive using wildcards
+	envContent := `#filter-unless TEST_* *_PROD
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"TEST_KEY1":  "test_value1",
+		"TEST_KEY2":  "test_value2",
+		"KEY_PROD":   "prod_value",
+		"OTHER_PROD": "other_prod",
+		"KEY3":       "old_value3",
+		"OTHER_KEY":  "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"TEST_KEY1":  "test_value1",
+		"TEST_KEY2":  "test_value2",
+		"KEY_PROD":   "prod_value",
+		"OTHER_PROD": "other_prod",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithMultipleFilterUnlessDirectives(t *testing.T) {
+	// Create a temporary file with multiple filter-unless directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with multiple filter-unless directives
+	envContent := `#filter-unless KEY1
+#filter-unless KEY2
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1":      "old_value1",
+		"KEY2":      "old_value2",
+		"KEY3":      "old_value3",
+		"OTHER_KEY": "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY1": "old_value1",
+		"KEY2": "old_value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterUnlessDirectiveAndRegularComments(t *testing.T) {
+	// Create a temporary file with filter-unless directive and regular comments
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter-unless directive and regular comments
+	envContent := `# Regular comment
+#filter-unless KEY1
+KEY2=value2
+# Another comment
+#filter-unless KEY3
+KEY4=value4`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "old_value1",
+		"KEY2":         "old_value2",
+		"KEY3":         "old_value3",
+		"KEY4":         "old_value4",
+		"OTHER_KEY":    "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY1": "old_value1",
+		"KEY3": "old_value3",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterUnlessDirectiveNoArguments(t *testing.T) {
+	// Create a temporary file with filter-unless directive but no arguments
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter-unless directive but no arguments
+	envContent := `#filter-unless
+KEY1=value1
+KEY2=value2`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "old_value1",
+		"KEY2":         "old_value2",
+		"OTHER_KEY":    "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "value1",
+		"KEY2":         "value2",
+		"OTHER_KEY":    "other_value",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterUnlessAndRemoveDirectives(t *testing.T) {
+	// Create a temporary file with both filter-unless and remove directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with both filter-unless and remove directives
+	envContent := `#remove OLD_KEY
+#filter-unless KEY1
+KEY2=value2`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"OLD_KEY":   "old_value",
+		"KEY1":      "old_value1",
+		"KEY2":      "old_value2",
+		"OTHER_KEY": "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY1": "old_value1",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterUnlessAndRequireDirectives(t *testing.T) {
+	// Create a temporary file with both filter-unless and require directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with both filter-unless and require directives
+	envContent := `#filter-unless KEY1
+#require KEY1
+KEY2=value2
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1":      "old_value1",
+		"KEY2":      "old_value2",
+		"OTHER_KEY": "other_value",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY1": "old_value1",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestApplyFilterUnlessDirective(t *testing.T) {
+	directives := []Directive{
+		{
+			Name:      "filter-unless",
+			Arguments: []string{"KEY1", "KEY2"},
+			Line:      1,
+		},
+	}
+
+	kvs := map[string]string{
+		"KEY1":      "value1",
+		"KEY2":      "value2",
+		"KEY3":      "value3",
+		"OTHER_KEY": "other_value",
+	}
+
+	result := applyFilterUnlessDirectives(kvs, directives)
+
+	expected := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestApplyFilterUnlessDirective_CaseInsensitive(t *testing.T) {
+	directives := []Directive{
+		{
+			Name:      "filter-unless",
+			Arguments: []string{"key1", "KEY2"},
+			Line:      1,
+		},
+	}
+
+	kvs := map[string]string{
+		"KEY1":      "value1",
+		"KEY2":      "value2",
+		"KEY3":      "value3",
+		"OTHER_KEY": "other_value",
+	}
+
+	result := applyFilterUnlessDirectives(kvs, directives)
+
+	expected := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestApplyFilterUnlessDirective_NonExistentKeys(t *testing.T) {
+	directives := []Directive{
+		{
+			Name:      "filter-unless",
+			Arguments: []string{"NONEXISTENT_KEY"},
+			Line:      1,
+		},
+	}
+
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	// Should remove all keys when filtering for non-existent keys
+	result := applyFilterUnlessDirectives(kvs, directives)
+
+	expected := map[string]string{}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestApplyFilterUnlessDirective_NoArguments(t *testing.T) {
+	directives := []Directive{
+		{
+			Name:      "filter-unless",
+			Arguments: []string{},
+			Line:      1,
+		},
+	}
+
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	// Should not filter anything when no arguments are provided
+	result := applyFilterUnlessDirectives(kvs, directives)
+
+	expected := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}

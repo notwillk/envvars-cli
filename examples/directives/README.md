@@ -56,6 +56,34 @@ Removes environment variables based on key names or wildcard patterns from the f
 #filter API_*_KEY *_API_*
 ```
 
+### `#filter-unless` Directive
+
+Keeps only environment variables that match the specified patterns, removing everything else. This is the inverse of the `#filter` directive.
+
+**Syntax:** `#filter-unless PATTERN1 PATTERN2 PATTERN3...`
+
+**Pattern Types:**
+- **Exact match:** `KEY_NAME` - keeps variables with exact key names (case-insensitive)
+- **Wildcard patterns:** `*` matches any sequence of characters
+  - `TEST_*` - keeps all keys starting with "TEST_"
+  - `*_PROD` - keeps all keys ending with "_PROD"
+  - `API_*_KEY` - keeps keys matching the pattern "API_" + anything + "_KEY"
+
+**Examples:**
+```env
+# Keep only specific keys (remove everything else)
+#filter-unless DEBUG_KEY LOG_LEVEL
+
+# Keep only test-related keys
+#filter-unless TEST_* *_TEST
+
+# Keep only production keys
+#filter-unless *_PROD PROD_*
+
+# Keep only API keys with specific pattern
+#filter-unless API_*_KEY *_API_*
+```
+
 ## Directive Processing Order
 
 Directives are processed in the following order:
@@ -63,7 +91,8 @@ Directives are processed in the following order:
 1. **`#remove`** - Applied to existing variables before merging
 2. **Variable merging** - File variables override existing ones
 3. **`#filter`** - Applied to the merged result
-4. **`#require`** - Applied to the final result (fails if required variables are missing)
+4. **`#filter-unless`** - Applied to the merged result (keeps only matching variables)
+5. **`#require`** - Applied to the final result (fails if required variables are missing)
 
 ## Combining Directives
 
@@ -75,6 +104,9 @@ You can use multiple directives in the same file:
 
 # Filter out test and debug variables
 #filter TEST_* DEBUG_* *_DEV
+
+# Keep only production-related variables
+#filter-unless *_PROD PROD_* API_*_KEY
 
 # Require essential variables
 #require DATABASE_URL API_KEY SECRET_TOKEN
@@ -90,6 +122,7 @@ All directive names are case-insensitive:
 - `#remove` === `#REMOVE` === `#Remove`
 - `#require` === `#REQUIRE` === `#Require`
 - `#filter` === `#FILTER` === `#Filter`
+- `#filter-unless` === `#FILTER-UNLESS` === `#Filter-Unless`
 
 ## Examples
 

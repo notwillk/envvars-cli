@@ -63,6 +63,9 @@ func ProcessFileWithMerge(existingKVs map[string]string, options Options) (map[s
 	// Apply filter directives to remove variables based on patterns
 	mergedVars = applyFilterDirectives(mergedVars, envFile.Directives)
 
+	// Apply filter-unless directives to keep only variables matching patterns
+	mergedVars = applyFilterUnlessDirectives(mergedVars, envFile.Directives)
+
 	// Finally, apply require directives to the final merged result
 	if err := applyRequireDirectives(mergedVars, envFile.Directives); err != nil {
 		return nil, err
@@ -324,6 +327,51 @@ func applyFilterDirectives(kvs map[string]string, directives []Directive) map[st
 	for _, directive := range directives {
 		if strings.ToLower(directive.Name) == "filter" {
 			applyFilterDirective(result, directive)
+		}
+	}
+
+	return result
+}
+
+// applyFilterUnlessDirectives applies filter-unless directives to keep only variables matching patterns
+func applyFilterUnlessDirectives(kvs map[string]string, directives []Directive) map[string]string {
+	result := make(map[string]string)
+
+	// Copy existing key-value pairs
+	for key, value := range kvs {
+		result[key] = value
+	}
+
+	// Collect all patterns from all filter-unless directives
+	var allPatterns []string
+	for _, directive := range directives {
+		if strings.ToLower(directive.Name) == "filter-unless" {
+			allPatterns = append(allPatterns, directive.Arguments...)
+		}
+	}
+
+	// If no patterns, keep all keys (no filtering)
+	if len(allPatterns) == 0 {
+		return result
+	}
+
+	// Find keys to keep (those matching any of the patterns)
+	keysToKeep := make(map[string]bool)
+	for key := range result {
+		for _, pattern := range allPatterns {
+			if matchesPattern(key, pattern) {
+				keysToKeep[key] = true
+				fmt.Fprintf(os.Stderr, "DEBUG: Keeping key %q (matches pattern %q)\n", key, pattern)
+				break // Key matches at least one pattern, so keep it
+			}
+		}
+	}
+
+	// Remove keys that don't match any pattern
+	for key := range result {
+		if !keysToKeep[key] {
+			fmt.Fprintf(os.Stderr, "DEBUG: Removing key %q (doesn't match any pattern)\n", key)
+			delete(result, key)
 		}
 	}
 
