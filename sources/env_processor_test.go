@@ -1091,3 +1091,512 @@ func TestApplyRequireDirective_NoArguments(t *testing.T) {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 }
+
+// Filter directive tests
+
+func TestProcessFileWithMerge_WithFilterDirective(t *testing.T) {
+	// Create a temporary file with filter directive
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter directive
+	envContent := `#filter KEY1 KEY2
+KEY3=value3
+KEY4=value4`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "old_value",
+		"KEY2":         "old_value2",
+		"KEY3":         "old_value3",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY3":         "value3",
+		"KEY4":         "value4",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterDirectiveCaseInsensitive(t *testing.T) {
+	// Create a temporary file with filter directive
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter directive (case-insensitive)
+	envContent := `#filter key1 KEY2
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1": "old_value",
+		"KEY2": "old_value2",
+		"KEY3": "old_value3",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY3": "value3",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterDirectiveWildcardPatterns(t *testing.T) {
+	// Create a temporary file with filter directive using wildcards
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter directive using wildcards
+	envContent := `#filter TEST_* *_PROD
+KEY3=value3
+KEY4=value4`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"TEST_KEY1":   "test_value1",
+		"TEST_KEY2":   "test_value2",
+		"KEY_PROD":    "prod_value",
+		"OTHER_PROD":  "other_prod_value",
+		"REGULAR_KEY": "regular_value",
+		"KEY3":        "old_value3",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"REGULAR_KEY": "regular_value",
+		"KEY3":        "value3",
+		"KEY4":        "value4",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithMultipleFilterDirectives(t *testing.T) {
+	// Create a temporary file with multiple filter directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with multiple filter directives
+	envContent := `#filter KEY1
+#filter KEY2
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1": "old_value1",
+		"KEY2": "old_value2",
+		"KEY3": "old_value3",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY3": "value3",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterDirectiveAndRegularComments(t *testing.T) {
+	// Create a temporary file with filter directive and regular comments
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter directive and regular comments
+	envContent := `# This is a regular comment
+#filter KEY1
+# Another comment
+KEY2=value2
+#filter KEY2
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1": "old_value1",
+		"KEY2": "old_value2",
+		"KEY3": "old_value3",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY3": "value3",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterDirectiveNoArguments(t *testing.T) {
+	// Create a temporary file with filter directive but no arguments
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with filter directive but no arguments
+	envContent := `#filter
+KEY1=value1
+KEY2=value2`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "old_value1",
+		"KEY2":         "old_value2",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "value1",
+		"KEY2":         "value2",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterAndRemoveDirectives(t *testing.T) {
+	// Create a temporary file with both filter and remove directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with both filter and remove directives
+	envContent := `#remove EXISTING_KEY
+#filter KEY1
+KEY2=value2
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"EXISTING_KEY": "existing_value",
+		"KEY1":         "old_value1",
+		"KEY2":         "old_value2",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY2": "value2",
+		"KEY3": "value3",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestProcessFileWithMerge_WithFilterAndRequireDirectives(t *testing.T) {
+	// Create a temporary file with both filter and require directives
+	tempFile, err := os.CreateTemp("", "test-*.env")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write env content with both filter and require directives
+	envContent := `#filter KEY1
+#require KEY2
+KEY2=value2
+KEY3=value3`
+	_, err = tempFile.WriteString(envContent)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	existingKVs := map[string]string{
+		"KEY1": "old_value1",
+		"KEY2": "old_value2",
+	}
+
+	options := Options{FilePath: tempFile.Name()}
+	result, err := ProcessFileWithMerge(existingKVs, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := map[string]string{
+		"KEY2": "value2",
+		"KEY3": "value3",
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestApplyFilterDirective(t *testing.T) {
+	directive := Directive{
+		Name:      "filter",
+		Arguments: []string{"KEY1", "KEY2"},
+		Line:      1,
+	}
+
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+		"KEY3": "value3",
+	}
+
+	applyFilterDirective(kvs, directive)
+
+	expected := map[string]string{
+		"KEY3": "value3",
+	}
+
+	if !reflect.DeepEqual(kvs, expected) {
+		t.Errorf("Expected %v, got %v", expected, kvs)
+	}
+}
+
+func TestApplyFilterDirective_CaseInsensitive(t *testing.T) {
+	directive := Directive{
+		Name:      "filter",
+		Arguments: []string{"key1", "KEY2"},
+		Line:      1,
+	}
+
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+		"KEY3": "value3",
+	}
+
+	applyFilterDirective(kvs, directive)
+
+	expected := map[string]string{
+		"KEY3": "value3",
+	}
+
+	if !reflect.DeepEqual(kvs, expected) {
+		t.Errorf("Expected %v, got %v", expected, kvs)
+	}
+}
+
+func TestApplyFilterDirective_NonExistentKeys(t *testing.T) {
+	directive := Directive{
+		Name:      "filter",
+		Arguments: []string{"NONEXISTENT_KEY"},
+		Line:      1,
+	}
+
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	// Should not error when filtering non-existent keys
+	applyFilterDirective(kvs, directive)
+
+	expected := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	if !reflect.DeepEqual(kvs, expected) {
+		t.Errorf("Expected %v, got %v", expected, kvs)
+	}
+}
+
+func TestApplyFilterDirective_NoArguments(t *testing.T) {
+	directive := Directive{
+		Name:      "filter",
+		Arguments: []string{},
+		Line:      1,
+	}
+
+	kvs := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	// Should not error when no arguments are provided
+	applyFilterDirective(kvs, directive)
+
+	expected := map[string]string{
+		"KEY1": "value1",
+		"KEY2": "value2",
+	}
+
+	if !reflect.DeepEqual(kvs, expected) {
+		t.Errorf("Expected %v, got %v", expected, kvs)
+	}
+}
+
+func TestMatchesPattern_ExactMatch(t *testing.T) {
+	tests := []struct {
+		key      string
+		pattern  string
+		expected bool
+	}{
+		{"KEY1", "KEY1", true},
+		{"key1", "KEY1", true}, // case-insensitive
+		{"KEY1", "key1", true}, // case-insensitive
+		{"KEY1", "KEY2", false},
+		{"KEY1", "KEY", false},
+		{"", "", true},
+		{"KEY1", "", false},
+		{"", "KEY1", false},
+	}
+
+	for _, test := range tests {
+		result := matchesPattern(test.key, test.pattern)
+		if result != test.expected {
+			t.Errorf("matchesPattern(%q, %q) = %v, expected %v", test.key, test.pattern, result, test.expected)
+		}
+	}
+}
+
+func TestMatchesPattern_WildcardPatterns(t *testing.T) {
+	tests := []struct {
+		key      string
+		pattern  string
+		expected bool
+	}{
+		{"TEST_KEY", "TEST_*", true},
+		{"TEST_KEY", "test_*", true}, // case-insensitive
+		{"test_key", "TEST_*", true}, // case-insensitive
+		{"TEST_KEY", "*_KEY", true},
+		{"TEST_KEY", "*TEST*", true},
+		{"TEST_KEY", "TEST*KEY", true},
+		{"TEST_KEY", "TEST_", false},
+		{"TEST_KEY", "*TEST", false},
+		{"TEST_KEY", "OTHER_*", false},
+		{"TEST_KEY", "*_OTHER", false},
+		{"TEST_KEY", "TEST_*_OTHER", false},
+		{"TEST_KEY", "TEST_*_KEY", false},
+		{"TEST_KEY", "TEST_*KEY", true},
+		{"TEST_KEY", "TEST*_KEY", true},
+		{"TEST_KEY", "TEST*KEY", true},
+	}
+
+	for _, test := range tests {
+		result := matchesPattern(test.key, test.pattern)
+		if result != test.expected {
+			t.Errorf("matchesPattern(%q, %q) = %v, expected %v", test.key, test.pattern, result, test.expected)
+		}
+	}
+}
+
+func TestMatchesPattern_ComplexWildcardPatterns(t *testing.T) {
+	tests := []struct {
+		key      string
+		pattern  string
+		expected bool
+	}{
+		{"API_KEY_PROD", "API_*_PROD", true},
+		{"API_KEY_DEV", "API_*_PROD", false},
+		{"API_KEY_PROD", "API_*_*", true},
+		{"API_KEY_PROD", "*_KEY_*", true},
+		{"API_KEY_PROD", "*_*_PROD", true},
+		{"API_KEY_PROD", "API*KEY*PROD", true},
+		{"API_KEY_PROD", "API*PROD", true},
+		{"API_KEY_PROD", "API*", true},
+		{"API_KEY_PROD", "*PROD", true},
+		{"API_KEY_PROD", "API_*_DEV", false},
+		{"API_KEY_PROD", "DEV_*_API", false},
+	}
+
+	for _, test := range tests {
+		result := matchesPattern(test.key, test.pattern)
+		if result != test.expected {
+			t.Errorf("matchesPattern(%q, %q) = %v, expected %v", test.key, test.pattern, result, test.expected)
+		}
+	}
+}

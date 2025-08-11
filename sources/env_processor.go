@@ -60,6 +60,9 @@ func ProcessFileWithMerge(existingKVs map[string]string, options Options) (map[s
 		mergedVars[variable.Key] = variable.Value
 	}
 
+	// Apply filter directives to remove variables based on patterns
+	mergedVars = applyFilterDirectives(mergedVars, envFile.Directives)
+
 	// Finally, apply require directives to the final merged result
 	if err := applyRequireDirectives(mergedVars, envFile.Directives); err != nil {
 		return nil, err
@@ -306,6 +309,70 @@ func resolveVariableReferences(value string, variables map[string]string) string
 		// If variable not found, return the original match
 		return match
 	})
+}
+
+// applyFilterDirectives applies filter directives to remove variables based on patterns
+func applyFilterDirectives(kvs map[string]string, directives []Directive) map[string]string {
+	result := make(map[string]string)
+
+	// Copy existing key-value pairs
+	for key, value := range kvs {
+		result[key] = value
+	}
+
+	// Apply filter directives
+	for _, directive := range directives {
+		if strings.ToLower(directive.Name) == "filter" {
+			applyFilterDirective(result, directive)
+		}
+	}
+
+	return result
+}
+
+// applyFilterDirective removes environment variables based on the filter directive
+func applyFilterDirective(kvs map[string]string, directive Directive) {
+	fmt.Fprintf(os.Stderr, "DEBUG: Applying filter directive: %+v\n", directive)
+	for _, arg := range directive.Arguments {
+		fmt.Fprintf(os.Stderr, "DEBUG: Filtering with pattern: %q\n", arg)
+		// Remove keys matching the pattern (case-insensitive)
+		for key := range kvs {
+			if matchesPattern(key, arg) {
+				fmt.Fprintf(os.Stderr, "DEBUG: Removing key %q (matches pattern %q)\n", key, arg)
+				delete(kvs, key)
+			}
+		}
+	}
+}
+
+// matchesPattern checks if a key matches a pattern with wildcard support
+func matchesPattern(key, pattern string) bool {
+	// Convert both to lowercase for case-insensitive matching
+	keyLower := strings.ToLower(key)
+	patternLower := strings.ToLower(pattern)
+
+	// If pattern contains wildcard, use pattern matching
+	if strings.Contains(patternLower, "*") {
+		return matchesWildcardPattern(keyLower, patternLower)
+	}
+
+	// Otherwise, use exact match
+	return keyLower == patternLower
+}
+
+// matchesWildcardPattern checks if a key matches a wildcard pattern
+func matchesWildcardPattern(key, pattern string) bool {
+	// Convert wildcard pattern to regex
+	regexPattern := strings.ReplaceAll(pattern, "*", ".*")
+	regexPattern = "^" + regexPattern + "$"
+
+	matched, err := regexp.MatchString(regexPattern, key)
+	if err != nil {
+		// If regex compilation fails, fall back to exact match
+		return key == pattern
+	}
+
+	return matched
 }
 
 // parseOptionsFile reads and parses a JSON options file
